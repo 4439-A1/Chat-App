@@ -33,6 +33,7 @@ def refresh_chat_display():
         chat_display.insert(tk.END, msg + "\n")
     chat_display.config(state=tk.DISABLED)
 
+
 def append_system(msg):
     chat_display.config(state=tk.NORMAL)
     chat_display.insert(tk.END, f"{msg}\n")
