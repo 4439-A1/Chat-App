@@ -39,3 +39,12 @@ Real-time receive thread that parses messages with dual [recipient][sender] tags
 Stores user credentials in ~/.chatclient_config.json
 
 Allows new chat tabs to be opened manually via username entry
+
+## Future Goals
+
+Implementing end-to-end encryption using RSA
+
+Creating applications using C++
+
+Expanding to mobile applications
+
