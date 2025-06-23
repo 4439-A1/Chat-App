@@ -4,8 +4,6 @@ import threading
 clients = {}  # {client_id: conn}
 usernames = {}  # {client_id: username}
 valid_users = {
-    "Lance": "lancey43",
-    "Simon": "simon"
 }
 client_id_counter = 1
 lock = threading.Lock()

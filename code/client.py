@@ -3,7 +3,8 @@ import threading
 import tkinter as tk
 import tkinter.simpledialog
 
-HOST = 'localhost'
+# HOST = 'localhost'
+HOST = '192.168.1.194'
 PORT = 12345
 
 # === Functions ===
@@ -119,11 +120,11 @@ current_chat = None  # which username is currently selected
 
 # === GUI Layout ===
 # Left sidebar for selecting users
-sidebar = tk.Frame(root, width=150, bg="#a3ec5f")
+sidebar = tk.Frame(root, width=150, bg="#dddddd")
 sidebar.pack(side=tk.LEFT, fill=tk.Y)
 
 # -- Entry at top of sidebar to start chat manually --
-recipient_frame = tk.Frame(sidebar, bg="#a3ec5f")
+recipient_frame = tk.Frame(sidebar, bg="#dddddd")
 recipient_frame.pack(padx=5, pady=5, anchor="nw")
 
 recipient_label = tk.Label(recipient_frame, text="To:", bg="#dddddd")
