@@ -6,8 +6,8 @@ import os
 import json
 import re
 
-HOST = 'localhost'
-# HOST = '192.168.1.194'
+# HOST = 'localhost'
+HOST = '192.168.1.194'
 PORT = 12345
 
 CONFIG_PATH = os.path.expanduser("~/.chatclient_config.json")
@@ -187,6 +187,7 @@ recipient_label.pack(side=tk.LEFT)
 
 recipient_entry = tk.Entry(recipient_frame, width=9)
 recipient_entry.pack(side=tk.LEFT, padx=(5, 0))
+recipient_entry.bind("<Return>", lambda event: start_chat())
 
 start_btn = tk.Button(recipient_frame, text="▶", command=start_chat, width=2)
 start_btn.pack(side=tk.LEFT, padx=5)
