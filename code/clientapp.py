@@ -6,8 +6,8 @@ import os
 import json
 import re
 
-HOST = 'localhost'
-# HOST = '192.168.1.194'
+# HOST = 'localhost'
+HOST = '192.168.1.194'
 PORT = 12345
 
 CONFIG_PATH = os.path.expanduser("~/.chatclient_config.json")
