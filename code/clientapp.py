@@ -1,3 +1,6 @@
+# clientapp.py
+# A simple chat client application using sockets and Tkinter for GUI.
+
 import socket
 import threading
 import tkinter as tk

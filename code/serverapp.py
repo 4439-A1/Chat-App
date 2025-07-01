@@ -1,3 +1,6 @@
+# serverapp.py
+# A simple chat server application using sockets and threading.
+
 import socket
 import threading
 import os
