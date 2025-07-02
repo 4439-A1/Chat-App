@@ -189,7 +189,7 @@ recipient_entry = tk.Entry(recipient_frame, width=9)
 recipient_entry.pack(side=tk.LEFT, padx=(5, 0))
 recipient_entry.bind("<Return>", lambda event: start_chat())
 
-start_btn = tk.Button(recipient_frame, text="▶", command=start_chat, width=2)
+start_btn = tk.Button(recipient_frame, text="Enter", command=start_chat, width=2)
 start_btn.pack(side=tk.LEFT, padx=5)
 
 # Status box
