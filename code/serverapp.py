@@ -21,6 +21,19 @@ chat_history = {}  # {username: {other_username: [message1, message2, ...]}}
 USER_DB_FILE = os.path.expanduser("~/.chat_users.json")
 CHAT_HISTORY_FILE = os.path.expanduser("~/.chat_history.json")
 
+user_pubkeys = {}  # {username: PEM-encoded public key}
+PUBKEYS_FILE = os.path.expanduser("~/.chat_pubkeys.json")
+
+def load_pubkeys():
+    global user_pubkeys
+    if os.path.exists(PUBKEYS_FILE):
+        with open(PUBKEYS_FILE, "r") as f:
+            user_pubkeys = json.load(f)
+
+def save_pubkeys():
+    with open(PUBKEYS_FILE, "w") as f:
+        json.dump(user_pubkeys, f)
+
 
 def load_chat_history():
     global chat_history
@@ -67,7 +80,15 @@ def handle_client(conn, addr, client_id):
         save_users()
         print(f"[REGISTERED] New user: {username}")
         conn.send("OK".encode())
+        
+    # After conn.send("OK".encode())
+    pubkey_data = conn.recv(2048)
+    if pubkey_data.startswith(b"[PUBKEY]"):
+        pem = pubkey_data[len(b"[PUBKEY]"):]
+        user_pubkeys[username] = pem.decode()
+        save_pubkeys()
 
+        
     # Proceed if authenticated
     usernames[client_id] = username
     print(f"[NEW] {username} ({addr}) as Client {client_id}")
@@ -89,11 +110,26 @@ def handle_client(conn, addr, client_id):
     
     try:
         while True:
-            msg = conn.recv(1024).decode()
+            msg = conn.recv(8192).decode()
             if not msg:
                 break
             # Format: "to_username|message"
             # print(msg)
+            if msg.startswith("[GETKEY]"):
+                key_user = msg[len("[GETKEY]"):]
+                key = user_pubkeys.get(key_user)
+                if key:
+                    try:
+                        conn.send(f"[PUBKEYRESP]{key}".encode())
+                    except:
+                        pass
+                else:
+                    try:
+                        conn.send("[INFO] ❌ Public key not found.\n".encode())
+                    except:
+                        pass
+                continue  # Skip further processing for this message
+
             if "|" in msg:
                 to_username, content = msg.split("|", 1)
                 from_username = usernames[client_id]

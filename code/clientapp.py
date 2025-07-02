@@ -1,6 +1,13 @@
 # clientapp.py
 # A simple chat client application using sockets and Tkinter for GUI.
 
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives import padding as sympadding
+import base64
+import secrets
+
 import socket
 import threading
 import tkinter as tk
@@ -9,8 +16,8 @@ import os
 import json
 import re
 
-# HOST = 'localhost'
-HOST = '192.168.1.194'
+HOST = 'localhost'
+# HOST = '192.168.1.194'
 PORT = 12345
 
 CONFIG_PATH = os.path.expanduser("~/.chatclient_config.json")
@@ -71,7 +78,7 @@ def receive():
     buffer = ""
     while True:
         try:
-            buffer += client.recv(1024).decode()
+            buffer += client.recv(8192).decode()
             while "\n" in buffer:
                 line, buffer = buffer.split("\n", 1)
                 if line.strip():
@@ -85,29 +92,72 @@ def process_message(msg):
     global current_chat
     if msg.startswith("[INFO]"):
         append_system(msg)
-    elif msg.startswith("["):
-        match = re.match(r"\[(.*?)\]\[(.*?)\] (.*)", msg)
-        other_user = match.group(1)
-        sender = match.group(2)
-        content = match.group(3)
-        
-        partner = other_user
-        
-        if sender == username:
-            display_msg = f"You: {content}"  # remove "username: " prefix
-        else:
-            display_msg = f"{sender}: {content}"
+        return
 
-        if partner not in chat_log:
-            chat_log[partner] = []
-            add_to_sidebar(partner)
+    match = re.match(r"\[(.*?)\]\[(.*?)\] (.*)", msg)
+    if not match:
+        append_system(f"⚠️ Could not parse message: {msg}")
+        return
 
-        chat_log[partner].append(display_msg)
+    other_user, sender, content = match.groups()
+    partner = other_user
 
-        if current_chat is None:
-            switch_chat(partner)
-        elif current_chat == partner:
-            refresh_chat_display()
+    # Attempt to decrypt if message looks encrypted
+    decrypted_content = content
+    try:
+        parts = content.split("|")
+        if len(parts) == 3:
+            encrypted_key_b64, iv_b64, ciphertext_b64 = parts
+            encrypted_key = base64.b64decode(encrypted_key_b64)
+            iv = base64.b64decode(iv_b64)
+            ciphertext = base64.b64decode(ciphertext_b64)
+
+            # Decrypt AES key with our private key
+            aes_key = private_key.decrypt(
+                encrypted_key,
+                padding.OAEP(
+                    mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                    algorithm=hashes.SHA256(),
+                    label=None
+                )
+            )
+
+            # Decrypt the message using AES
+            cipher = Cipher(algorithms.AES(aes_key), modes.CBC(iv))
+            decryptor = cipher.decryptor()
+            padded_msg = decryptor.update(ciphertext) + decryptor.finalize()
+
+            # Unpad the message
+            unpadder = sympadding.PKCS7(128).unpadder()
+            plaintext = unpadder.update(padded_msg) + unpadder.finalize()
+            decrypted_content = plaintext.decode()
+    except Exception as e:
+        decrypted_content = "[🔒 Could not decrypt message]"
+
+    # Display message
+    if sender == username:
+        display_msg = f"You: {decrypted_content}"
+    else:
+        display_msg = f"{sender}: {decrypted_content}"
+
+    if partner not in chat_log:
+        chat_log[partner] = []
+        add_to_sidebar(partner)
+
+    chat_log[partner].append(display_msg)
+
+    if current_chat is None:
+        switch_chat(partner)
+    elif current_chat == partner:
+        refresh_chat_display()
+
+
+def request_public_key(user):
+    client.send(f"[GETKEY]{user}".encode())
+    response = client.recv(4096).decode()
+    if response.startswith("[PUBKEYRESP]"):
+        return response[len("[PUBKEYRESP]"):]
+    raise ValueError("Failed to retrieve public key.")
 
 def send():
     msg = msg_entry.get().strip()
@@ -117,8 +167,33 @@ def send():
         append_system("⚠️ Please select a recipient from the left.")
         return
     try:
-        full_msg = f"{current_chat}|{msg}"
-        client.send(full_msg.encode())
+        from cryptography.hazmat.primitives import padding as sympadding
+
+        # Get recipient's public key
+        pubkey_pem = request_public_key(current_chat)  # implement this below
+        recipient_key = serialization.load_pem_public_key(pubkey_pem.encode())
+
+        # Generate AES key
+        aes_key = secrets.token_bytes(32)
+        iv = secrets.token_bytes(16)
+        cipher = Cipher(algorithms.AES(aes_key), modes.CBC(iv))
+        encryptor = cipher.encryptor()
+
+        # Pad and encrypt message
+        padder = sympadding.PKCS7(128).padder()
+        padded_msg = padder.update(msg.encode()) + padder.finalize()
+        ciphertext = encryptor.update(padded_msg) + encryptor.finalize()
+
+        # Encrypt AES key with RSA
+        encrypted_key = recipient_key.encrypt(
+            aes_key,
+            padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None)
+        )
+
+        # Construct payload: base64(aes_key_rsa)|base64(iv)|base64(ciphertext)
+        payload = f"{current_chat}|{base64.b64encode(encrypted_key).decode()}|{base64.b64encode(iv).decode()}|{base64.b64encode(ciphertext).decode()}"
+        client.send(payload.encode())
+        
         msg_entry.delete(0, tk.END)
         chat_log[current_chat].append(f"You: {msg}")
         refresh_chat_display()
@@ -168,6 +243,31 @@ try:
 except Exception as e:
     print(f"❌ Could not connect: {e}")
     exit()
+
+KEY_DIR = os.path.expanduser("~/.chat_keys")
+os.makedirs(KEY_DIR, exist_ok=True)
+
+PRIVATE_KEY_PATH = os.path.join(KEY_DIR, f"{username}_private.pem")
+PUBLIC_KEY_PATH = os.path.join(KEY_DIR, f"{username}_public.pem")
+
+if not os.path.exists(PRIVATE_KEY_PATH):
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    with open(PRIVATE_KEY_PATH, "wb") as f:
+        f.write(private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.NoEncryption()))
+    with open(PUBLIC_KEY_PATH, "wb") as f:
+        f.write(private_key.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo))
+else:
+    with open(PRIVATE_KEY_PATH, "rb") as f:
+        private_key = serialization.load_pem_private_key(f.read(), password=None)
+
+with open(PUBLIC_KEY_PATH, "rb") as f:
+    client.send(b"[PUBKEY]" + f.read())
+
 
 connected = True
 
