@@ -1,3 +1,0 @@
-([('ChatClient',
-   '/Users/lance/Documents/GitHub/Chat-App/dist/ChatClient',
-   'EXECUTABLE')],)

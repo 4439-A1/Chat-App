@@ -6,7 +6,7 @@ PyInstaller.__main__.run([
     '--windowed',
     '--noconsole',
     '--name=ChatClient',
-    '--icon=myicon.icns',
+    '--icon=input.png',
     '--hidden-import=tkinter',
     '--hidden-import=tkinter.simpledialog',
 ])
