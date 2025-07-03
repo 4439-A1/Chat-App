@@ -16,11 +16,22 @@ import os
 import json
 import re
 
-# HOST = 'localhost'
-HOST = '192.168.1.194'
+HOST = 'localhost'
+# HOST = '192.168.1.194'
 PORT = 12345
 
 CONFIG_PATH = os.path.expanduser("~/.chatclient_config.json")
+CHAT_HISTORY = os.path.expanduser("~/.chatclient_history.json")
+
+def load_chat_history():
+    if os.path.exists(CHAT_HISTORY):
+        with open(CHAT_HISTORY, "r") as f:
+            return json.load(f)
+    return {}
+
+def save_chat_history(chat_log):
+    with open(CHAT_HISTORY, "w") as f:
+        json.dump(chat_log, f)
 
 def load_credentials():
     if os.path.exists(CONFIG_PATH):
@@ -145,6 +156,7 @@ def process_message(msg):
         add_to_sidebar(partner)
 
     chat_log[partner].append(display_msg)
+    save_chat_history(chat_log)
 
     if current_chat is None:
         switch_chat(partner)
@@ -196,6 +208,7 @@ def send():
         
         msg_entry.delete(0, tk.END)
         chat_log[current_chat].append(f"You: {msg}")
+        save_chat_history(chat_log)
         refresh_chat_display()
     except:
         append_system("❌ Message failed to send.")
@@ -271,7 +284,10 @@ with open(PUBLIC_KEY_PATH, "rb") as f:
 
 connected = True
 
-chat_log = {}        # {username: [message strings]}
+if not os.path.exists(CHAT_HISTORY):
+    with open(CHAT_HISTORY, "w") as f:
+        json.dump({}, f)
+chat_log = load_chat_history()        # {username: [message strings]}
 current_chat = None  # which username is currently selected
 
 # === GUI Layout ===
@@ -324,6 +340,16 @@ account_menu = tk.Menu(menu_bar, tearoff=0)
 account_menu.add_command(label="Logout", command=logout)
 menu_bar.add_cascade(label="Account", menu=account_menu)
 root.config(menu=menu_bar)
+
+# Populate sidebar with past chat users
+for user in chat_log:
+    add_to_sidebar(user)
+
+# Optionally, load the most recent chat
+if chat_log:
+    current_chat = list(chat_log.keys())[-1]
+    refresh_chat_display()
+
 
 # === Setup and Start ===
 send_btn.config(command=send)

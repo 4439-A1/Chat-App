@@ -16,10 +16,9 @@ lock = threading.Lock()
 # USER_DB_FILE = "users.json"
 
 chat_history = {}  # {username: {other_username: [message1, message2, ...]}}
-# CHAT_HISTORY_FILE = "chat_history.json"
+CHAT_HISTORY_FILE = os.path.expanduser("~/.chatserver_history.json")
 
 USER_DB_FILE = os.path.expanduser("~/.chat_users.json")
-CHAT_HISTORY_FILE = os.path.expanduser("~/.chat_history.json")
 
 user_pubkeys = {}  # {username: PEM-encoded public key}
 PUBKEYS_FILE = os.path.expanduser("~/.chat_pubkeys.json")
@@ -107,6 +106,9 @@ def handle_client(conn, addr, client_id):
                 conn.send(f"[{other_user}][{sender}] {msg}\n".encode())
             except:
                 pass
+    # Clear chat history for this user
+    chat_history[username] = {}
+    save_chat_history()
     
     try:
         while True:
@@ -145,14 +147,25 @@ def handle_client(conn, addr, client_id):
                     continue
                 
                 send_msg = f"[{from_username}][{from_username}] {content}\n"
-                if to_username != from_username:
-                    send_to_username(to_username, send_msg)
                 
-                # Save message to chat history
-                chat_history.setdefault(from_username, {}).setdefault(to_username, []).append(content_packet)
-                if from_username != to_username:
-                    chat_history.setdefault(to_username, {}).setdefault(from_username, []).append(content_packet)
-                save_chat_history()
+                recipient_online = any(uname == to_username for uname in usernames.values())
+
+                if recipient_online:
+                    if to_username != from_username:
+                        send_to_username(to_username, send_msg)
+                else:
+                    print(f"[QUEUE] {to_username} is offline. Saving message to chat history.")
+                    chat_history.setdefault(to_username, {}).setdefault(from_username, []).append([from_username, content])
+                    save_chat_history()
+                
+                # if to_username != from_username:
+                #     send_to_username(to_username, send_msg)
+                
+                # # Save message to chat history
+                # chat_history.setdefault(from_username, {}).setdefault(to_username, []).append(content_packet)
+                # if from_username != to_username:
+                #     chat_history.setdefault(to_username, {}).setdefault(from_username, []).append(content_packet)
+                # save_chat_history()
     except:
         pass
 
