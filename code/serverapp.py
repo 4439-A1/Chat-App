@@ -140,7 +140,7 @@ def handle_client(conn, addr, client_id):
                 key = user_pubkeys.get(key_user)
                 if key:
                     try:
-                        conn.send(f"[PUBKEYRESP]{key}".encode())
+                        conn.send(f"[PUBKEYRESP]{key}\n".encode())
                     except:
                         pass
                 else:
