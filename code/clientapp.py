@@ -90,11 +90,28 @@ def receive():
     while True:
         try:
             buffer += client.recv(8192).decode()
-            while "\n" in buffer:
-                line, buffer = buffer.split("\n", 1)
-                if line.strip():
-                    print(f"Received: {line}")
-                    process_message(line.strip())
+            # while "\n" in buffer:
+            #     line, buffer = buffer.split("\n", 1)
+            #     if line.strip():
+            #         print(f"Received: {line}")
+            #         process_message(line.strip())
+            if "[PUBKEYRESP]-----BEGIN PUBLIC KEY-----" in buffer:
+                start_idx = buffer.find("[PUBKEYRESP]-----BEGIN PUBLIC KEY-----")
+                end_marker = "-----END PUBLIC KEY-----"
+                end_idx = buffer.find(end_marker, start_idx)
+                if end_idx != -1:
+                    # Full key received
+                    full_key = buffer[start_idx:end_idx + len(end_marker)]
+                    rest = buffer[end_idx + len(end_marker):]
+                    buffer = rest
+                    print(f"Received: {full_key}")
+                    process_message(full_key.strip())
+            else:
+                while "\n" in buffer:
+                    line, buffer = buffer.split("\n", 1)
+                    if line.strip():
+                        print(f"Received: {line}")
+                        process_message(line.strip())
         except:
             append_system("❌ Lost connection to server.")
             break
