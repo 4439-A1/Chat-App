@@ -83,20 +83,48 @@ def add_to_sidebar(user):
     btn = tk.Button(sidebar, text=user, command=lambda u=user: switch_chat(u))
     btn.pack(fill=tk.X)
 
+# def receive():
+#     print("received")
+#     global current_chat
+#     buffer = ""
+#     while True:
+#         try:
+#             buffer += client.recv(8192).decode()
+#             while "\n" in buffer:
+#                 line, buffer = buffer.split("\n", 1)
+#                 if line.strip():
+#                     print(f"Received: {line}")
+#                     if line.startswith("[PUBKEY]"):
+#                         # Ignore or log [PUBKEY] messages if they are not expected
+#                         append_system("Received public key data (handled during initialization).")
+#                         continue
+#                     process_message(line.strip())
+#         except:
+#             append_system("❌ Lost connection to server.")
+#             break
+
 def receive():
     print("received")
     global current_chat
     buffer = ""
     while True:
         try:
-            buffer += client.recv(8192).decode()
+            data = client.recv(8192).decode()
+            buffer += data
             while "\n" in buffer:
                 line, buffer = buffer.split("\n", 1)
-                if line.strip():
+                line = line.strip()
+                if line:
                     print(f"Received: {line}")
-                    process_message(line.strip())
-        except:
-            append_system("❌ Lost connection to server.")
+                    if line.startswith("[PUBKEY]"):
+                        append_system("Received public key data (handled during initialization).")
+                        continue
+                    if line.startswith("[PUBKEYRESP]"):
+                        append_system("Received [PUBKEYRESP] in receive (handled by request_public_key).")
+                        continue  # Let request_public_key handle this
+                    process_message(line)
+        except Exception as e:
+            append_system(f"❌ Lost connection to server: {e}")
             break
 
 def process_message(msg):
@@ -163,13 +191,87 @@ def process_message(msg):
     elif current_chat == partner:
         refresh_chat_display()
 
-
 def request_public_key(user):
-    client.send(f"[GETKEY]{user}".encode())
-    response = client.recv(4096).decode()
-    if response.startswith("[PUBKEYRESP]"):
-        return response[len("[PUBKEYRESP]"):]
-    raise ValueError("Failed to retrieve public key.")
+    try:
+        client.send(f"[GETKEY]{user}".encode())
+        buffer = ""
+        while True:
+            data = client.recv(4096).decode()
+            buffer += data
+            # Check for complete [PUBKEYRESP] message (ends with -----END PUBLIC KEY-----\n)
+            if "[PUBKEYRESP]" in buffer and "-----END PUBLIC KEY-----\n" in buffer:
+                start_idx = buffer.index("[PUBKEYRESP]") + len("[PUBKEYRESP]")
+                end_idx = buffer.index("-----END PUBLIC KEY-----\n") + len("-----END PUBLIC KEY-----\n")
+                pubkey_pem = buffer[start_idx:end_idx]
+                print(f"Received public key for {user}: {pubkey_pem[:50]}...")
+                # Clear buffer up to the processed message
+                buffer = buffer[end_idx:]
+                return pubkey_pem
+            elif "[INFO]" in buffer:
+                start_idx = buffer.index("[INFO]")
+                end_idx = buffer.find("\n", start_idx)
+                if end_idx == -1:
+                    continue  # Wait for more data
+                info_msg = buffer[start_idx:end_idx]
+                buffer = buffer[end_idx + 1:]
+                append_system(info_msg)
+                raise ValueError(f"Server reported: {info_msg}")
+            else:
+                append_system(f"Ignored unexpected message: {data[:50]}...")
+                continue
+    except Exception as e:
+        append_system(f"Failed to retrieve public key for {user}: {e}")
+        raise ValueError(f"Failed to retrieve public key: {e}")
+
+# def request_public_key(user):
+#     client.send(f"[GETKEY]{user}".encode())
+#     response = client.recv(4096).decode()
+#     if response.startswith("[PUBKEYRESP]"):
+#         return response[len("[PUBKEYRESP]"):]
+#     raise ValueError("Failed to retrieve public key.")
+
+# def send():
+#     msg = msg_entry.get().strip()
+#     if not msg:
+#         return
+#     if current_chat is None:
+#         append_system("⚠️ Please select a recipient from the left.")
+#         return
+#     try:
+#         from cryptography.hazmat.primitives import padding as sympadding
+
+#         # Get recipient's public key
+#         pubkey_pem = request_public_key(current_chat)  # implement this below
+#         recipient_key = serialization.load_pem_public_key(pubkey_pem.encode())
+
+#         # Generate AES key
+#         aes_key = secrets.token_bytes(32)
+#         iv = secrets.token_bytes(16)
+#         cipher = Cipher(algorithms.AES(aes_key), modes.CBC(iv))
+#         encryptor = cipher.encryptor()
+
+#         # Pad and encrypt message
+#         padder = sympadding.PKCS7(128).padder()
+#         padded_msg = padder.update(msg.encode()) + padder.finalize()
+#         ciphertext = encryptor.update(padded_msg) + encryptor.finalize()
+
+#         # Encrypt AES key with RSA
+#         encrypted_key = recipient_key.encrypt(
+#             aes_key,
+#             padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None)
+#         )
+
+#         # Construct payload: base64(aes_key_rsa)|base64(iv)|base64(ciphertext)
+#         payload = f"{current_chat}|{base64.b64encode(encrypted_key).decode()}|{base64.b64encode(iv).decode()}|{base64.b64encode(ciphertext).decode()}"
+#         client.send(payload.encode())
+        
+#         msg_entry.delete(0, tk.END)
+#         chat_log[current_chat].append(f"You: {msg}")
+#         save_chat_history(chat_log)
+#         refresh_chat_display()
+#     except:
+#         append_system("❌ Message failed to send.")
+#         msg_entry.delete(0, tk.END)
 
 def send():
     msg = msg_entry.get().strip()
@@ -179,10 +281,8 @@ def send():
         append_system("⚠️ Please select a recipient from the left.")
         return
     try:
-        from cryptography.hazmat.primitives import padding as sympadding
-
         # Get recipient's public key
-        pubkey_pem = request_public_key(current_chat)  # implement this below
+        pubkey_pem = request_public_key(current_chat)
         recipient_key = serialization.load_pem_public_key(pubkey_pem.encode())
 
         # Generate AES key
@@ -210,10 +310,9 @@ def send():
         chat_log[current_chat].append(f"You: {msg}")
         save_chat_history(chat_log)
         refresh_chat_display()
-    except:
-        append_system("❌ Message failed to send.")
+    except Exception as e:
+        append_system(f"❌ Message failed to send: {e}")
         msg_entry.delete(0, tk.END)
-    # msg_entry.delete(0, tk.END)
 
 def logout():
     clear_credentials()

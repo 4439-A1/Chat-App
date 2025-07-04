@@ -81,11 +81,29 @@ def handle_client(conn, addr, client_id):
         conn.send("OK".encode())
         
     # After conn.send("OK".encode())
-    pubkey_data = conn.recv(2048)
-    if pubkey_data.startswith(b"[PUBKEY]"):
-        pem = pubkey_data[len(b"[PUBKEY]"):]
-        user_pubkeys[username] = pem.decode()
-        save_pubkeys()
+    # pubkey_data = conn.recv(2048)
+    # if pubkey_data.startswith(b"[PUBKEY]"):
+    #     pem = pubkey_data[len(b"[PUBKEY]"):]
+    #     user_pubkeys[username] = pem.decode()
+    #     save_pubkeys()
+
+    # After conn.send("OK".encode())
+    try:
+        pubkey_data = conn.recv(2048)
+        if pubkey_data.startswith(b"[PUBKEY]"):
+            pem = pubkey_data[len(b"[PUBKEY]"):]
+            user_pubkeys[username] = pem.decode()
+            save_pubkeys()
+            print(f"[PUBKEY] Stored public key for {username}")
+        else:
+            print(f"[WARNING] Expected [PUBKEY] from {username}, received: {pubkey_data[:20]}...")
+            conn.send("[INFO] Expected public key data.".encode())
+            conn.close()
+            return
+    except Exception as e:
+        print(f"[ERROR] Failed to receive public key for {username}: {e}")
+        conn.close()
+        return
 
         
     # Proceed if authenticated
